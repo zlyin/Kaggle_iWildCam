@@ -5,6 +5,8 @@ import os
 import sys
 sys.path.append("../DL2CV/Orca/io")
 from hdf5datasetwriter import HDF5DatasetWriter
+sys.path.append("./utils")
+from class_balance import reweight_by_frequency, class_balance_by_effective_number
 from sklearn.preprocessing import LabelEncoder, LabelBinarizer
 from sklearn.model_selection import train_test_split
 from imutils import paths
@@ -30,7 +32,8 @@ VAL_HDF5 = os.path.sep.join([OUTPUT, "animal_crops_val.hdf5"])
 TEST_HDF5 = os.path.sep.join([OUTPUT, "animal_crops_test.hdf5"])
 
 DATASET_MEAN = os.path.sep.join([OUTPUT, "animal_crops_train_mean.json"])
-DATSET_CLASS_WEIGHT = os.path.sep.join([OUTPUT, "animal_crops_class_weights.json"])
+DATASET_CLASS_WEIGHT1 = os.path.sep.join([OUTPUT, "animal_crops_class_weights_frequency.json"])
+DATASET_CLASS_WEIGHT2 = os.path.sep.join([OUTPUT, "animal_crops_class_weights_effective_num.json"])
 LABEL_MAPPING = os.path.sep.join([OUTPUT, "encodedLabels_to_categoryID_mapping.json"])
 STATS_HIST = os.path.sep.join([OUTPUT, "animal_crops_dim_stats.png"])
 STATS_INFO = os.path.sep.join([OUTPUT, "animal_crops_dim_stats_description.csv"])
@@ -75,16 +78,23 @@ with open(LABEL_MAPPING, "w") as json_file:
     json_file.write(json.dumps(mapping_dict))
 json_file.close()
 
-# assign class_weights to counter class imbalance!
-print("[INFO] compute & serialize class weights of training data")
-classTotals = trainLabels.sum(axis=0)
-data_class_weights = classTotals.max() / classTotals
-class_weights_dict = dict(enumerate(data_class_weights))
-        
-with open(DATSET_CLASS_WEIGHT, "w") as json_file:
-    json_file.write(json.dumps(class_weights_dict))
+## assign class_weights to counter class imbalance!
+print("[INFO] compute & serialize class weights based on frequency...")
+data_class_weights1 = reweight_by_frequency(trainLabels)
+class_weights_dict1 = dict(enumerate(data_class_weights1))
+with open(DATASET_CLASS_WEIGHT1, "w") as json_file:
+    json_file.write(json.dumps(class_weights_dict1))
 json_file.close()
-print("[INFO] (min, max) =", (data_class_weights.min(), data_class_weights.max()))
+print("[INFO] (min, max) =", (data_class_weights1.min(), data_class_weights1.max()))
+
+
+print("[INFO] compute & serialize class weights based on effective number...")
+data_class_weights2 = class_balance_by_effective_number(trainLabels)
+class_weights_dict2 = dict(enumerate(data_class_weights2))
+with open(DATASET_CLASS_WEIGHT2, "w") as json_file:
+    json_file.write(json.dumps(class_weights_dict2))
+json_file.close()
+print("[INFO] (min, max) =", (data_class_weights2.min(), data_class_weights2.max()))
 
 
 """
@@ -117,7 +127,7 @@ for (dType, paths, labels, outputPath) in tqdm(datasets):
     print("[INFO] building %s ..." % outputPath)
     if dType in ["train", "val"]:
         writer = HDF5DatasetWriter(outputPath, (len(paths), TARGET_H, TARGET_W, 3),
-                bufSize=1000, labelDtype="int", labelOneHot=len(encoded_class))
+                bufSize=1000, labelDtype="float", labelOneHot=len(encoded_class))
     else:
         writer = HDF5DatasetWriter(outputPath, (len(paths), TARGET_H, TARGET_W, 3),
                 bufSize=1000, labelDtype="string", labelOneHot=0)

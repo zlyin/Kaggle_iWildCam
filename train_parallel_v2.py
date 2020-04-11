@@ -26,6 +26,9 @@ from simpledatasetloader import SimpleDatasetLoader
 from utils.metrics import recall, precision, f1_score
 sys.path.append("../DL2CV/Orca/io")
 from hdf5datasetgenerator import HDF5DatasetGenerator
+sys.path.append("./utils")
+from preprocessings import CLAHE, SimpleWhiteBalance
+from label_smoothing import smooth_labels
 
 from keras import backend as K
 from keras.preprocessing.image import ImageDataGenerator
@@ -33,6 +36,7 @@ from keras.callbacks import LearningRateScheduler
 from keras.optimizers import SGD, Adam
 from keras.models import load_model
 from keras.utils import multi_gpu_model
+from tensorflow.keras.losses import CategoricalCrossentropy
 from sklearn.metrics import classification_report
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.model_selection import train_test_split
@@ -61,34 +65,38 @@ def poly_decay(epoch):
     """
     maxEpochs = EPOCHS
     baseLR = INIT_LR
-    power = 1.0
+    power = 2.5
 
     # compute
     lr = baseLR * (1 - (epoch / float(maxEpochs))) ** power
     return lr
+
 
 ## Build arguments parser
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--checkpoints", required=True, help="path to the checkpoints directory")
 parser.add_argument("-m", "--model", type=str, help="path to a specific loaded model")
 parser.add_argument("-s", "--start_epoch", type=int, default=0, help="epoch to start training from")
+parser.add_argument("-lsohe", "--label_smooth_one_hot", type=bool, default=False, help="if apply label smoothing to one-hot encoded labels")
 args = vars(parser.parse_args())
 assert os.path.exists(args["checkpoints"])
 
 
 ## Hyperparams
-EPOCHS = 15
-INIT_LR = 1e-4
+EPOCHS = 40
+INIT_LR = 1e-1
 BATCH = 64 * 2
 NUM_CLASSES = 209   # need to double check with each dataset folder
 METRICS = ["accuracy", f1_score]
+SMOOTH_ONEHOT = args["label_smooth_one_hot"]
+
 INPUT = "./data/animal_crops_hdf5"
-TRAIN_HDF5 = os.path.sep.join([INPUT, "animal_crops_train.hdf5"])
-VAL_HDF5 = os.path.sep.join([INPUT, "animal_crops_val.hdf5"])
-TEST_HDF5 = os.path.sep.join([INPUT, "animal_crops_test.hdf5"])
+TRAIN_HDF5 = os.path.sep.join([INPUT, "smooth_animal_crops_train.hdf5"])
+VAL_HDF5 = os.path.sep.join([INPUT, "smooth_animal_crops_val.hdf5"])
+TEST_HDF5 = os.path.sep.join([INPUT, "smooth_animal_crops_test.hdf5"])
 DATASET_MEAN = os.path.sep.join([INPUT, "animal_crops_train_mean.json"])
 LABEL_MAPPING = os.path.sep.join([INPUT, "encodedLabels_to_categoryID_mapping.json"])
-DATSET_CLASS_WEIGHT = os.path.sep.join([INPUT, "animal_crops_class_weights.json"])
+DATSET_CLASS_WEIGHT = os.path.sep.join([INPUT, "animal_crops_class_weights_frequency.json"])
 
 # load encoded_class to category_id mapping...
 mapping_dict = json.loads(open(LABEL_MAPPING, "r").read())
@@ -114,9 +122,26 @@ aug = ImageDataGenerator(
 
 # initiate data genrators
 trainGen = HDF5DatasetGenerator(TRAIN_HDF5, 64, aug=aug, 
-        preprocessors=[sp, mp, iap], binarize=False, classes=NUM_CLASSES)
+        preprocessors=[sp, mp, iap], binarize=False, classes=NUM_CLASSES, mode="r+")
 valGen = HDF5DatasetGenerator(VAL_HDF5, 64, aug=aug, 
-        preprocessors=[sp, mp, iap], binarize=False, classes=NUM_CLASSES)
+        preprocessors=[sp, mp, iap], binarize=False, classes=NUM_CLASSES, mode="r+")
+
+# apply label smoothing to one-hot encoded labels
+if SMOOTH_ONEHOT == True:
+    print("[INFO] smoothing train labels...")
+    train_labels = np.zeros((trainGen.numImages, NUM_CLASSES))
+    trainGen.db["labels"].read_direct(train_labels)
+    smoothed_train_labels = smooth_labels(train_labels, factor=0.01)
+    trainGen.db["labels"].write_direct(smoothed_train_labels)
+
+    print("[INFO] smoothing val labels...")
+    val_labels = np.zeros((valGen.numImages, NUM_CLASSES))
+    valGen.db["labels"].read_direct(val_labels)
+    smoothed_val_labels = smooth_labels(val_labels, factor=0.01)
+    valGen.db["labels"].write_direct(smoothed_val_labels)
+
+    print("[INFO] Label smooth finished, restart training!")
+    sys.exit()
 
 
 """
@@ -166,7 +191,7 @@ callbacks = [
         # use new parallel checkpoint callback which saves single template model!
         ParallelCheckpoint(model, args["checkpoints"], every=5, startAt=args["start_epoch"]), 
         TrainingMonitor(FIG_PATH, jsonPath=JSON_PATH, startAt=args["start_epoch"]),
-        #LearningRateScheduler(poly_decay),
+        LearningRateScheduler(poly_decay),
         ]
 
 # distribute BATCH to 2 GPUs, each GPUs computes BATCH / 2

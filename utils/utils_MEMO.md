@@ -28,3 +28,4 @@
 		of Prediction & Prior distribution (uniform);
 - Core
 	- **Soften** the one-hot encoding prediction
+

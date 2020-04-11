@@ -70,11 +70,11 @@ MODEL = os.path.sep.join([args["checkpoints"], "epoch_%s.hdf5" % args["start_epo
 CSV = os.path.sep.join([args["checkpoints"], "submission_at_%s.csv" % args["start_epoch"]])
 
 INPUT = "./data/animal_crops_hdf5"
-VAL_HDF5 = os.path.sep.join([INPUT, "animal_crops_val.hdf5"])
-TEST_HDF5 = os.path.sep.join([INPUT, "animal_crops_test.hdf5"])
+VAL_HDF5 = os.path.sep.join([INPUT, "smooth_animal_crops_val.hdf5"])
+TEST_HDF5 = os.path.sep.join([INPUT, "smooth_animal_crops_test.hdf5"])
 DATASET_MEAN = os.path.sep.join([INPUT, "animal_crops_train_mean.json"])
 LABEL_MAPPING = os.path.sep.join([INPUT, "encodedLabels_to_categoryID_mapping.json"])
-DATSET_CLASS_WEIGHT = os.path.sep.join([INPUT, "animal_crops_class_weights.json"])
+DATASET_CLASS_WEIGHT = os.path.sep.join([INPUT, "animal_crops_class_weights_frequency.json"])
 
 # load encoded_class to category_id mapping...
 mapping_dict = json.loads(open(LABEL_MAPPING, "r").read())
@@ -82,7 +82,7 @@ encodedLabel_to_className = mapping_dict["encodedLabel_to_className"]
 className_to_categoryID = mapping_dict["className_to_categoryID"]
 
 # class weights
-class_weights_dict = json.loads(open(DATSET_CLASS_WEIGHT, "r").read())
+class_weights_dict = json.loads(open(DATASET_CLASS_WEIGHT, "r").read())
 data_class_weights = list(class_weights_dict.values())
 print("[INFO] class weights (min, max) =", (min(data_class_weights), max(data_class_weights)))
 
