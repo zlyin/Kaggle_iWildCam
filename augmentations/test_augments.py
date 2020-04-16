@@ -1,47 +1,85 @@
-#!/usr/bin/python3.6
+#!/usr/local/bin/python3
 
 ## import packages
 import cv2
 import numpy as np
 import glob
 import os
-from os import listdir
-from os.path import isfile, join
-from shutil import move
+import sys
+sys.path.append("../utils")
+from preprocessings import *
 from imutils import paths
-from imagepreprocessing import CLAHE, SimpleWhiteBalance
+from tqdm import tqdm
 
 
-OUTPUT_FOLDER = "./CLAHE_WB_COMBO"
+#OUTPUT_FOLDER = "./RandomSatuation"
+#OUTPUT_FOLDER = "./RandomHue"
+#OUTPUT_FOLDER = "./RandomLightingNoise"
+#OUTPUT_FOLDER = "./Sharpen"
+OUTPUT_FOLDER = "./GreenGray"
+#OUTPUT_FOLDER = "./RedGray"
+#OUTPUT_FOLDER = "./BlueGray"
+#OUTPUT_FOLDER = "./Reverse"
+#OUTPUT_FOLDER = "./Log"
+#OUTPUT_FOLDER = "./Gamma"
+OUTPUT_FOLDER = "./Deblur"
 
-imagePaths = list(paths.list_images("./test_images"))[:1]
+
+if not os.path.exists(OUTPUT_FOLDER):
+    os.makedirs(OUTPUT_FOLDER)
+
+# fetch all image paths
+imagePaths = list(paths.list_images("./test_images/blurred"))
 N = len(imagePaths)
 print("[INFO] test on %d images" % N)
 
-
-
 if __name__ == "__main__":
-
-    for i, path in enumerate(imagePaths):
-        img = cv2.imread(path)
-        h, w, ch = img.shape
-
-#        if h < w:
-#            img=cv2.resize(img,(299, int(299*h/w)))
-#        elif h>w:
-#            img=cv2.resize(img,(int(299*w/h),299 ))
-#        else:
-#            img=cv2.resize(img,(299,299 ))
+    for i, path in enumerate(tqdm(imagePaths)):
+        image = cv2.imread(path)
+        h, w, ch = image.shape
         
-        img_clahe = CLAHE(img)
-        img_swb = SimpleWhiteBalance(img_clahe) 
-        final = img_swb
+        # random satuation
+        #img_sat = RandomSaturation().process(image)
+        #final = img_sat
 
+        # Random hue
+        #img_hue = RandomHue().process(image)
+        #final = img_hue
+
+        # Random lighting noise
+        #img_light_noise = RandomLightingNoise().process(image)
+        #final = img_light_noise
+
+        # Sharpen images
+        #img_sharp = Sharpen().process(image)
+        #final = img_sharp
+
+        # extract green to gray
+        #img_single_gray = SingleChannelToGray(chanDim=1).process(image)
+        #final = img_single_gray
+
+        # reverse image
+        #img_reverse = Reverse().process(image)
+        #final = img_reverse
+
+        # Log transform
+        #img_log = LogTransform(c=35).process(image)
+        #final = img_log
+        
+        # gamma        
+        #img_gamma = Gamma().process(image)
+        #final = img_gamma
+
+        # Deblur
+        img_deblur = Deblur().process(image)
+        final = img_deblur
+    
         # save
         name = path.split(os.path.sep)[-1].replace(".jpg", "_(%d, %d).jpg" % (h, w))
         savepath = os.path.sep.join([OUTPUT_FOLDER, name])
         cv2.imwrite(savepath, final)
 
 print("[INFO] done!")
+
 
 
