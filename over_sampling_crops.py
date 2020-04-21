@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/local/bin/python3.7
 
 ## import package
 import os
@@ -19,13 +19,15 @@ AUG_THRES = 20
 
 ## initiate data agumentation generator
 aug = ImageDataGenerator(
-        rotation_range=20, 
-        width_shift_range=0.2, 
-        height_shift_range=0.2, 
-        shear_range=0.2, 
-        zoom_range=0.2,
+        rotation_range=10, 
+        #width_shift_range=0.1, 
+        #height_shift_range=0.1, 
+        shear_range=0.1, 
+        zoom_range=0.1,
+        channel_shift_range=10.0,
         horizontal_flip=True, 
         fill_mode="nearest")
+
 
 ## loop over class folders and augment on the ones < AUG_THRES
 for folder in tqdm(os.listdir(DIRECTORY)):
@@ -39,20 +41,19 @@ for folder in tqdm(os.listdir(DIRECTORY)):
         for path in tqdm(imagePaths):
             image = load_img(path)
             image = img_to_array(image)
-            image = np.expand_dims(image, axis=0)
+            image = np.expand_dims(image, axis=0)   # has dim=4!
 
             # create a data generator with ImageDataGenerator.flow() 
             i = 0
             ImageGen = aug.flow(
                     image,
-                    batch_size=1, 
+                    batch_size=4, 
                     save_to_dir=os.path.sep.join([DIRECTORY, folder]),
                     save_prefix="aug", 
                     save_format="jpg")
 
-            for img in ImageGen:
-                i += 1
-                if i >= int(AUG_THRES / num): break
+            for i in range(int(AUG_THRES / num)):
+                ImageGen.next()
         pass
     pass
 
