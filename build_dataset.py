@@ -23,10 +23,17 @@ from shutil import copy
 Prepare animal crops for iWildCam 2020
 Generate train/val/test hdf5 files;
 """
-TRAIN_IMAGES = "./data/animal_crops"
-TEST_IMAGES = "./data/animal_crops_test"
+#TRAIN_IMAGES = "./data/debug"
+#TRAIN_IMAGES = "./data/animal_crops"
+#TEST_IMAGES = "./data/animal_crops_test"
+TRAIN_IMAGES = "./data/animal_crops_224x224_v2/animal_crops_224x224"
+TEST_IMAGES = "./data/animal_crops_224x224_v2/animal_crops_test_224x224"
 
-OUTPUT = "./data/animal_crops_hdf5"
+
+#OUTPUT = "./data/debug"
+#OUTPUT = "./data/animal_crops_hdf5"
+OUTPUT = "./data/animal_crops_224x224_v2/animal_crops_224x224_hdf5"
+
 TRAIN_HDF5 = os.path.sep.join([OUTPUT, "animal_crops_train.hdf5"])
 VAL_HDF5 = os.path.sep.join([OUTPUT, "animal_crops_val.hdf5"])
 TEST_HDF5 = os.path.sep.join([OUTPUT, "animal_crops_test.hdf5"])
@@ -38,8 +45,9 @@ LABEL_MAPPING = os.path.sep.join([OUTPUT, "encodedLabels_to_categoryID_mapping.j
 STATS_HIST = os.path.sep.join([OUTPUT, "animal_crops_dim_stats.png"])
 STATS_INFO = os.path.sep.join([OUTPUT, "animal_crops_dim_stats_description.csv"])
 
-TARGET_H = 64
-TARGET_W = 64
+TARGET_H = 224
+TARGET_W = 224
+BUFFER = 128
 
 
 """
@@ -108,8 +116,8 @@ testLabels = [path.split(os.path.sep)[-1] for path in testPaths]   # file name!
 - construct a list of different dataset
 """
 datasets = [
-        ("train", trainPaths, trainLabels, TRAIN_HDF5),
         ("val", valPaths, valLabels, VAL_HDF5),
+        ("train", trainPaths, trainLabels, TRAIN_HDF5),
         #("test", testPaths, testLabels, TEST_HDF5),
         ]
 
@@ -121,16 +129,21 @@ W = []
 # initialize RBG mean values
 (R, G, B) = ([], [], [])
 
+# store validation set
+val_names = []
+j = 1
+
 # loop over dataset & generate hdf5 file
 for (dType, paths, labels, outputPath) in tqdm(datasets):
     # create HDF5 writer
     print("[INFO] building %s ..." % outputPath)
+
     if dType in ["train", "val"]:
         writer = HDF5DatasetWriter(outputPath, (len(paths), TARGET_H, TARGET_W, 3),
-                bufSize=1000, labelDtype="float", labelOneHot=len(encoded_class))
+                bufSize=BUFFER, labelDtype="float", labelOneHot=len(encoded_class))
     else:
         writer = HDF5DatasetWriter(outputPath, (len(paths), TARGET_H, TARGET_W, 3),
-                bufSize=1000, labelDtype="string", labelOneHot=0)
+                bufSize=BUFFER, labelDtype="string", labelOneHot=0)
 
     # progress bar
     for i, (path, label) in enumerate(tqdm(zip(paths, labels))):
@@ -154,7 +167,6 @@ for (dType, paths, labels, outputPath) in tqdm(datasets):
 
         # add image, label to HDF5 dataset
         writer.add([image], [label])
-        pass
     
     # close HDF5 db when finish
     writer.close()
