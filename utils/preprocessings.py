@@ -62,7 +62,7 @@ class RandomSaturation:
         assert self.upper >= self.lower, "contrast upper must be >= lower."
         assert self.lower >= 0, "contrast lower must be non-negative."
 
-    def process(self, image):
+    def preprocess(self, image):
         # convert to HSV space
         image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         image = image.astype("float")
@@ -73,7 +73,6 @@ class RandomSaturation:
         image = image.astype(np.uint8)
         image = cv2.cvtColor(image, cv2.COLOR_HSV2BGR)
         return image
-
 
 
 class RandomHue:
@@ -87,7 +86,7 @@ class RandomHue:
         assert delta >= 0.0 and delta <= 360.0
         self.delta = delta
 
-    def process(self, image):
+    def preprocess(self, image):
         # convert to HSV space
         image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         image = image.astype("float")
@@ -109,7 +108,7 @@ class RandomLightingNoise:
     def __init__(self):
         self.perms = [(0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0)]
 
-    def process(self, image):
+    def preprocess(self, image):
         if np.random.randint(2):
             # 随机选取一个通道的交换顺序，交换图像三个通道的值
             swap = self.perms[np.random.randint(len(self.perms))]
@@ -145,9 +144,103 @@ class Sharpen:
         #锐化
         self.kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]], np.float32) 
 
-    def process(self, image):
+    def preprocess(self, image):
         image = cv2.filter2D(image, -1, kernel=self.kernel)
         return image
+
+
+class RandomCutout:
+    """RandomCutOut multi patches from an image
+    - Args:
+        - n_holes: # of patches to cut out from each image
+        - length: # of pixels of each square patch
+    - Returns:
+        - image with random cutout holes
+    """
+    def __init__(self, n_holes=2, length=100, pixel_level=False):
+        self.n_holes = n_holes
+        self.length = length
+        self.pixel_level = pixel_level
+
+    def preprocess(self, image):
+        H, W, _ = image.shape
+        mask = np.ones((H, W), np.float32) 
+
+        for i in range(self.n_holes):
+            if self.pixel_level == True:
+                n = int(np.sqrt(self.n_holes))
+                use_replace = False if n < min(W, H) else True
+                x = np.random.choice(W, n, replace=use_replace)
+                y = np.random.choice(H, n, replace=use_replace)
+                # creat meshgrid
+                xv, yv = np.meshgrid(x, y, sparse=False, indexing="xy")
+                mask[yv, xv] = 0
+
+            else:
+                x, y = np.random.randint(W), np.random.randint(H)
+                y1 = np.clip(y - self.length // 2, 0, H)
+                y2 = np.clip(y + self.length // 2, 0, H)
+                x1 = np.clip(x - self.length // 2, 0, W)
+                x2 = np.clip(x + self.length // 2, 0, W)
+                # get mask
+                mask[y1 : y2, x1 : x2] = 0
+
+        # apply to image
+        image = image * np.stack([mask, mask, mask], axis=-1)
+        return image
+
+
+class RandomErasing:
+    """            
+    p : the probability that random erasing is performed
+    s_l, s_h : minimum / maximum proportion of erased area against input image
+    r_1, r_2 : minimum / maximum aspect ratio of erased area
+    v_l, v_h : minimum / maximum value for erased area
+    pixel_level : pixel-level randomization for erased area
+    """
+    def __init__(self, p=0.5, portion_l=0.02, portion_h=0.4, ar_l=0.3,
+            ar_h=1/0.3, val_l=0, val_h=255, pixel_level=False):
+        self.p = p
+        self.portion_l = portion_l
+        self.portion_h = portion_h
+        self.ar_l = ar_l
+        self.ar_h = ar_h
+        self.val_l = val_l
+        self.val_h = val_h
+        self.pixel_level = pixel_level
+
+    def preprocess(self, image):
+        H, W, C = image.shape
+
+        # do not apply random erasing
+        p1 = np.random.rand()
+        if p1 > self.p:
+            return image
+        
+        while True:
+            portion = np.random.uniform(self.portion_l, self.portion_h) * H * W
+            ar = np.random.uniform(self.ar_l, self.ar_h)
+            w = int(np.sqrt(portion / ar))
+            h = int(np.sqrt(portion * ar))
+            left = np.random.randint(0, W)
+            top = np.random.randint(0, H)
+            
+            # check 
+            if left + w <= W and top + h <= H:
+                break
+
+        # check whether to apply at pixel level
+        if self.pixel_level:
+            c = np.random.uniform(self.val_l, self.val_h, (h, w, C))
+        else:
+            c = np.random.uniform(self.val_l, self.val_h)
+
+        # return
+        image[top : top + h, left: left + w, :] = c
+        return image
+
+
+
 
 #################### not very useful ########################
 
@@ -161,7 +254,7 @@ class SingleChannelToGray:
     def __init__(self, chanDim=1):
         self.chanDim = chanDim
 
-    def process(self, image):
+    def preprocess(self, image):
         img_channel = image[:, :, self.chanDim]
         gray =  cv2.merge([img_channel, img_channel, img_channel])
         return gray 
@@ -170,7 +263,7 @@ class Reverse:
     def __init__(self):
         pass
 
-    def process(self, image):
+    def preprocess(self, image):
         return 255 - image  
 
 
@@ -178,7 +271,7 @@ class LogTransform:
     def __init__(self, c=42):
         self.c = c
 
-    def process(self, image):
+    def preprocess(self, image):
         output = self.c * np.log(1.0 + image)
         output = np.uint8(output + 0.5)
         return output
@@ -189,7 +282,7 @@ class Gamma:
         self.c = c
         self.gamma = gamma
 
-    def process(self, image):
+    def preprocess(self, image):
         print(image)
 
 
@@ -220,7 +313,7 @@ class Deblur:
         self.thres = thres 
         self.blurred = False
 
-    def process(self, image):
+    def preprocess(self, image):
         # convert to gray scale at first
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 	# compute the Laplacian of the image and then return the focus
