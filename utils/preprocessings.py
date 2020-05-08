@@ -174,8 +174,21 @@ class RandomCutout:
                 y = np.random.choice(H, n, replace=use_replace)
                 # creat meshgrid
                 xv, yv = np.meshgrid(x, y, sparse=False, indexing="xy")
-                mask[yv, xv] = 0
+                # expand holes from centers
+                xv1 = np.clip(xv - self.length // 2, 0, W)
+                xv2 = np.clip(xv + self.length // 2, 0, W)
+                yv1 = np.clip(yv - self.length // 2, 0, H)
+                yv2 = np.clip(yv + self.length // 2, 0, H)
 
+                # loop over
+                for i in range(yv1.shape[0]):
+                    for j in range(yv2.shape[1]):
+                        y1 = yv1[i][j]
+                        y2 = yv2[i][j]
+                        x1 = xv1[i][j]
+                        x2 = xv2[i][j]
+                        mask[y1 : y2, x1 : x2] = 0
+                    pass 
             else:
                 x, y = np.random.randint(W), np.random.randint(H)
                 y1 = np.clip(y - self.length // 2, 0, H)
